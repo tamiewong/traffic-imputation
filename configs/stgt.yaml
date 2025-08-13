@@ -1,0 +1,40 @@
+seed: 42
+use_cuda: false
+
+# model
+d_model: 32 #96
+heads: 2 #4
+layers: 1 #2
+time2vec_k: 6
+dropout: 0.2
+
+# spatial encodings
+K_lappe: 0 #16
+spd_hops: 1 #2 #3        # BFS hop depth for neighbor sets
+K_neighbors: 4 #16 #24    # number of neighbors per edge (includes self)
+
+# training
+epochs: 1 #20
+lr: 0.002
+weight_decay: 0.0001
+grad_clip: 1.0
+lambda_conserve: 0.001
+val_frac: 0.1
+
+# batching windows
+window: 16 #96   # 1 day if 15-min bins
+step: 16 #96
+
+# critical knobs to stop OOM:
+temporal_edge_batch: 256 #2048
+spatial_edge_batch: 256 #4096
+
+enable_spatial: false    # disable spatial attention for now
+max_windows_debug: null #1     # stop after first window
+use_cuda: false
+
+paths:
+  roads: data/study_area_edges_w_road_idx.parquet
+  utd: data/utd_agg.parquet
+  node_map: data/node_road_idx_map.parquet
+  outputs: outputs/
