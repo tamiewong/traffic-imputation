@@ -33,6 +33,8 @@ def build_edge_index(roads: pd.DataFrame):
     cols = ['u','v','key','road_idx']
     assert all(c in roads.columns for c in cols), f"roads must contain {cols}"
     edges_df = roads[cols].drop_duplicates().reset_index(drop=True)
+    # sort to ensure stability
+    edges_df = edges_df.sort_values(['u','v','key','road_idx']).reset_index(drop=True)
     edges_df['node_tuple'] = list(zip(edges_df['u'], edges_df['v'], edges_df['key']))
     edge_idx_of_node = {t:i for i,t in enumerate(edges_df['node_tuple'])}
     node_tuple_of_edge = edges_df['node_tuple'].tolist()
@@ -61,6 +63,14 @@ def build_flow_mask(
     """
     assert {'road_idx','date','total_flow'}.issubset(utd.columns)
     assert {'road_idx','u','v','key'}.issubset(node_map.columns)
+
+    # check for graph mismatch
+    known = set(edge_idx_of_node.keys())
+    nm = node_map[['u','v','key']].drop_duplicates()
+    nm['node_tuple'] = list(zip(nm['u'], nm['v'], nm['key']))
+    missing = nm.loc[~nm['node_tuple'].isin(known)]
+    if not missing.empty:
+        print(f"[WARN] {len(missing)} node_map edges not in roads edge index; they will be ignored.")
 
     df = utd[['road_idx','date','total_flow']].dropna().copy()
     df['date'] = pd.to_datetime(df['date']).values

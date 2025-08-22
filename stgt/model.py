@@ -19,31 +19,47 @@ class Time2Vec(nn.Module):
     def forward(self, t):  # (E,T,1)
         return torch.cat([self.lin(t), torch.sin(self.per(t))], dim=-1)  # (E,T,k)
 
-class TemporalBlock(nn.Module):
-    """Temporal self-attention along T, processed in edge chunks to avoid E×T×d blow-ups."""
-    def __init__(self, d_model: int, n_heads: int, d_ff: int = 256, dropout: float = 0.2, edge_chunk: int = 2048):
-        super().__init__()
-        self.mha = nn.MultiheadAttention(d_model, n_heads, batch_first=True, dropout=dropout)
-        self.ffn = nn.Sequential(
-            nn.Linear(d_model, d_ff), nn.ReLU(), nn.Dropout(dropout), nn.Linear(d_ff, d_model)
-        )
-        self.ln1 = nn.LayerNorm(d_model)
-        self.ln2 = nn.LayerNorm(d_model)
-        self.drop = nn.Dropout(dropout)
-        self.edge_chunk = edge_chunk
+# class TemporalBlock(nn.Module):
+#     """Temporal self-attention along T, processed in edge chunks to avoid E×T×d blow-ups."""
+#     def __init__(self, d_model: int, n_heads: int, d_ff: int = 256, dropout: float = 0.2, edge_chunk: int = 2048):
+#         super().__init__()
+#         self.mha = nn.MultiheadAttention(d_model, n_heads, batch_first=True, dropout=dropout)
+#         self.ffn = nn.Sequential(
+#             nn.Linear(d_model, d_ff), nn.ReLU(), nn.Dropout(dropout), nn.Linear(d_ff, d_model)
+#         )
+#         self.ln1 = nn.LayerNorm(d_model)
+#         self.ln2 = nn.LayerNorm(d_model)
+#         self.drop = nn.Dropout(dropout)
+#         self.edge_chunk = edge_chunk
 
-    def forward(self, x):  # x: (E,T,d)
-        E, T, d = x.shape
-        out = torch.empty_like(x)
-        chunk = self.edge_chunk
-        for s in range(0, E, chunk):
-            e = min(s + chunk, E)
-            xi = x[s:e]                             # (e-s, T, d)
-            yi,_ = self.mha(xi, xi, xi, need_weights=False)
-            yi = self.ln1(xi + self.drop(yi))
-            zi = self.ffn(yi)
-            out[s:e] = self.ln2(yi + self.drop(zi))
-        return out
+#     def forward(self, x):  # x: (E,T,d)
+#         E, T, d = x.shape
+#         out = torch.empty_like(x)
+#         chunk = self.edge_chunk
+#         for s in range(0, E, chunk):
+#             e = min(s + chunk, E)
+#             xi = x[s:e]                             # (e-s, T, d)
+#             yi,_ = self.mha(xi, xi, xi, need_weights=False)
+#             yi = self.ln1(xi + self.drop(yi))
+#             zi = self.ffn(yi)
+#             out[s:e] = self.ln2(yi + self.drop(zi))
+#         return out
+
+
+class TemporalGRUBlock(nn.Module):
+    def __init__(self, d_model, dropout=0.1):
+        super().__init__()
+        self.gru = nn.GRU(input_size=d_model, hidden_size=d_model, batch_first=True)
+        self.ln = nn.LayerNorm(d_model)
+        self.ff = nn.Sequential(nn.Linear(d_model, 4*d_model), nn.ReLU(), nn.Linear(4*d_model, d_model))
+        self.drop = nn.Dropout(dropout)
+    def forward(self, x):              # x: (E,T,d)
+        y,_ = self.gru(x)              # (E,T,d)
+        h = self.ln(x + self.drop(y))
+        z = self.ff(h)
+        print('[MODEL][TEMPORAL][FORWARD] done')
+        return self.ln(h + self.drop(z))
+    
 
 class SpatialNeighborAttentionBlock(nn.Module):
     """
@@ -95,6 +111,7 @@ class SpatialNeighborAttentionBlock(nn.Module):
         Q = self.q(x).view(E, T, self.n_heads, self.d_head)
         Kx = self.k(x[:,0,:]).view(E, self.n_heads, self.d_head)  # keys/values are time-local; reuse per t
         Vx = self.v(x[:,0,:]).view(E, self.n_heads, self.d_head)
+        print('[MODEL][SPATIAL][FORWARD] projection ok')
 
         # for each time step, process edges in chunks
         for t in range(T):
@@ -113,12 +130,32 @@ class SpatialNeighborAttentionBlock(nn.Module):
                 Z = torch.einsum("ehk,ekhd->ehd", attn, Vnbr).contiguous().view(end-start, self.d_model)
                 out[start:end, t, :] = self.o(Z)
                 start = end
+        print('[MODEL][SPATIAL][FORWARD] process edges ok')
 
         # residual + FFN
         h = self.ln1(x + self.drop(out))
         y = self.ffn(h)
         h = self.ln2(h + self.drop(y))
+        print('[MODEL][SPATIAL][FORWARD] done')
         return h
+    
+class SpatialSparseMMBlock(nn.Module):
+    def __init__(self, sp_adj: torch.Tensor, d_model: int, dropout: float = 0.1):
+        super().__init__()
+        self.sp_adj = sp_adj        # torch.sparse_coo (E,E)
+        self.ln1 = nn.LayerNorm(d_model)
+        self.ln2 = nn.LayerNorm(d_model)
+        self.ffn = nn.Sequential(nn.Linear(d_model, 4*d_model), nn.ReLU(), nn.Linear(4*d_model, d_model))
+        self.drop = nn.Dropout(dropout)
+    def forward(self, x):           # x: (E,T,d)
+        E, T, d = x.shape
+        out = torch.empty_like(x)
+        for t in range(T):
+            out[:, t, :] = torch.sparse.mm(self.sp_adj, x[:, t, :])
+        h = self.ln1(x + self.drop(out))
+        y = self.ffn(h)
+        print('[MODEL][SPARSEMM][FORWARD] done')
+        return self.ln2(h + self.drop(y))
 
 class STGT(nn.Module):
     def __init__(
@@ -132,7 +169,9 @@ class STGT(nn.Module):
         n_layers: int = 2,
         dropout: float = 0.2,
         temporal_edge_batch: int = 2048,
-        spatial_edge_batch: int = 4096
+        spatial_edge_batch: int = 4096,
+        spatial_mode='sparsemm',
+        sp_adj=None
     ):
         super().__init__()
         self.time2vec = Time2Vec(time2vec_k)
@@ -145,13 +184,21 @@ class STGT(nn.Module):
             self.register_parameter("pe_spatial", None)
 
         self.temporal_blocks = nn.ModuleList([
-            TemporalBlock(d_model, n_heads, dropout=dropout, edge_chunk=temporal_edge_batch)
+            # TemporalBlock(d_model, n_heads, dropout=dropout, edge_chunk=temporal_edge_batch)
+            TemporalGRUBlock(d_model, dropout=dropout)
             for _ in range(n_layers)
         ])
-        self.spatial_blocks  = nn.ModuleList([
-            SpatialNeighborAttentionBlock(d_model, n_heads, neighbor_index, dropout=dropout, edge_chunk=spatial_edge_batch)
-            for _ in range(n_layers)
-        ])
+        if spatial_mode == "sparsemm":
+            assert sp_adj is not None
+            self.spatial_blocks = nn.ModuleList([SpatialSparseMMBlock(sp_adj, d_model, dropout=dropout) for _ in range(n_layers)])
+        elif spatial_mode == 'attention':
+            self.spatial_blocks = nn.ModuleList([SpatialNeighborAttentionBlock(d_model, n_heads, neighbor_index, dropout=dropout, edge_chunk=spatial_edge_batch) for _ in range(n_layers)])
+        else:
+            self.spatial_blocks = nn.ModuleList([])
+        # self.spatial_blocks  = nn.ModuleList([
+        #     SpatialNeighborAttentionBlock(d_model, n_heads, neighbor_index, dropout=dropout, edge_chunk=spatial_edge_batch)
+        #     for _ in range(n_layers)
+        # ])
         self.head = nn.Linear(d_model, 1)
 
     def forward(self, x, hours, dows, U_lappe):
@@ -164,8 +211,14 @@ class STGT(nn.Module):
         if self.use_pe and U_lappe.numel() > 0:
             h = h + self.pe_spatial(U_lappe).unsqueeze(1)
 
-        for tblk, sblk in zip(self.temporal_blocks, self.spatial_blocks):
+        for i, tblk in enumerate(self.temporal_blocks):
             h = tblk(h)
-            h = sblk(h)
+            if i < len(self.spatial_blocks):   # only if spatial enabled
+                h = self.spatial_blocks[i](h)
 
+        # for tblk, sblk in zip(self.temporal_blocks, self.spatial_blocks):
+        #     h = tblk(h)
+        #     h = sblk(h)
+        print('[MODEL][FORWARD] done')
         return F.softplus(self.head(h)).squeeze(-1)  # (E,T)
+    
