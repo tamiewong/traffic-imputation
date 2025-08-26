@@ -207,13 +207,13 @@ def train_model(config_path: str):
                 m = torch.from_numpy(Mb_tr).bool().to(device)                                       # (E,W)
                 h = torch.from_numpy(hours).float().to(device)
                 d = torch.from_numpy(dows).float().to(device)
-                print('[TRAIN] build features ok', flush=True)
+                # print('[TRAIN] build features ok', flush=True)
 
                 # Normalise target and input for stability
                 y = torch.log1p(y)   # log(1 + y) -> compresses large values
                 x = torch.log1p(x)   # optional: do the same to input features
                 # x = torch.cat([x, m.unsqueeze(-1).float()], dim=-1)  # (E, W, 2)
-                print('[TRAIN] normalise x,y ok', flush=True)
+                # print('[TRAIN] normalise x,y ok', flush=True)
 
                 try:
                     t0 = time.time()
@@ -236,7 +236,7 @@ def train_model(config_path: str):
                 n_batches += 1
 
             last_avg_loss = total_loss / max(n_batches, 1)
-            print(f"[TRAIN][CHECKPOINT] Epoch {ep+1}/{epochs} - train_loss: {last_avg_loss:.4f}"); sys.stdout.flush()
+            # print(f"[TRAIN][CHECKPOINT] Epoch {ep+1}/{epochs} - train_loss: {last_avg_loss:.4f}"); sys.stdout.flush()
 
             # save checkpoint every epoch
             ckpt_path = os.path.join(out_dir, f"stgt_ep{ep+1}.pt")

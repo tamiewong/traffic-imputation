@@ -25,7 +25,7 @@ To run the ST-GT
 4. Run this line to train model:
 python -m stgt.train --config configs/stgt.yaml
 5. Run this line to evaluate model:
-python -m stgt.run_eval
+python -m stgt.run_eval --ckpt "outputs\stgt_YYYYMMDD-HHMMSS.pt"
 
 Data size
 Number of timestamps (temporal) = 2083

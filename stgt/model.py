@@ -57,7 +57,7 @@ class TemporalGRUBlock(nn.Module):
         y,_ = self.gru(x)              # (E,T,d)
         h = self.ln(x + self.drop(y))
         z = self.ff(h)
-        print('[MODEL][TEMPORAL][FORWARD] done')
+        # print('[MODEL][TEMPORAL][FORWARD] done')
         return self.ln(h + self.drop(z))
     
 
@@ -111,7 +111,7 @@ class SpatialNeighborAttentionBlock(nn.Module):
         Q = self.q(x).view(E, T, self.n_heads, self.d_head)
         Kx = self.k(x[:,0,:]).view(E, self.n_heads, self.d_head)  # keys/values are time-local; reuse per t
         Vx = self.v(x[:,0,:]).view(E, self.n_heads, self.d_head)
-        print('[MODEL][SPATIAL][FORWARD] projection ok')
+        # print('[MODEL][SPATIAL][FORWARD] projection ok')
 
         # for each time step, process edges in chunks
         for t in range(T):
@@ -130,13 +130,13 @@ class SpatialNeighborAttentionBlock(nn.Module):
                 Z = torch.einsum("ehk,ekhd->ehd", attn, Vnbr).contiguous().view(end-start, self.d_model)
                 out[start:end, t, :] = self.o(Z)
                 start = end
-        print('[MODEL][SPATIAL][FORWARD] process edges ok')
+        # print('[MODEL][SPATIAL][FORWARD] process edges ok')
 
         # residual + FFN
         h = self.ln1(x + self.drop(out))
         y = self.ffn(h)
         h = self.ln2(h + self.drop(y))
-        print('[MODEL][SPATIAL][FORWARD] done')
+        # print('[MODEL][SPATIAL][FORWARD] done')
         return h
     
 class SpatialSparseMMBlock(nn.Module):
@@ -148,13 +148,22 @@ class SpatialSparseMMBlock(nn.Module):
         self.ffn = nn.Sequential(nn.Linear(d_model, 4*d_model), nn.ReLU(), nn.Linear(4*d_model, d_model))
         self.drop = nn.Dropout(dropout)
     def forward(self, x):           # x: (E,T,d)
+        dev = self.sp_adj.device
+        x = x.to(dev)
+        # hours = hours.to(dev)
+        # if dows is not None:  dows = dows.to(dev)
+        # if U_lappe is not None: U_lappe = U_lappe.to(dev)
+        x = x.float() #; hours = hours.float()
+        # if dows is not None: dows = dows.float()
+        # if U_lappe is not None: U_lappe = U_lappe.float()
+    
         E, T, d = x.shape
         out = torch.empty_like(x)
         for t in range(T):
             out[:, t, :] = torch.sparse.mm(self.sp_adj, x[:, t, :])
         h = self.ln1(x + self.drop(out))
         y = self.ffn(h)
-        print('[MODEL][SPARSEMM][FORWARD] done')
+        # print('[MODEL][SPARSEMM][FORWARD] done')
         return self.ln2(h + self.drop(y))
 
 class STGT(nn.Module):
@@ -219,6 +228,6 @@ class STGT(nn.Module):
         # for tblk, sblk in zip(self.temporal_blocks, self.spatial_blocks):
         #     h = tblk(h)
         #     h = sblk(h)
-        print('[MODEL][FORWARD] done')
+        # print('[MODEL][FORWARD] done')
         return F.softplus(self.head(h)).squeeze(-1)  # (E,T)
     

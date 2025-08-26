@@ -1,13 +1,43 @@
 
 # stgt/run_eval.py
-import os, sys, json, torch, numpy as np, pandas as pd
+import os, sys, json, glob, argparse, torch, numpy as np, pandas as pd
 from scipy.sparse import csr_matrix
 from stgt.model import STGT
 from stgt.eval import evaluate_period, compute_metrics
 from stgt.data import window_generator
 
+def find_latest_ckpt(dirpath="outputs", pattern="stgt_*.pt"):
+    paths = glob.glob(os.path.join(dirpath, pattern))
+    if not paths:
+        return None
+    # newest by modification time
+    return max(paths, key=os.path.getmtime)
+
+def prompt_ckpt(default_path: str | None) -> str:
+    hint = f" [{default_path}]" if default_path else ""
+    try:
+        user_inp = input(f"Enter path to checkpoint .pt file{hint}: ").strip().strip('"').strip("'")
+    except EOFError:
+        user_inp = ""
+    ckpt = user_inp or default_path
+    if not ckpt:
+        raise FileNotFoundError("No checkpoint path provided and no default found.")
+    if not os.path.isfile(ckpt):
+        raise FileNotFoundError(f"Checkpoint not found: {ckpt}")
+    if not ckpt.lower().endswith(".pt"):
+        raise ValueError(f"Expected a .pt file, got: {ckpt}")
+    return ckpt
+
 def main():
-    ckpt_path = os.path.join("outputs", "stgt_20250825-172800.pt")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-c", "--ckpt", default=os.environ.get("STGT_CKPT"),
+                        help="Path to checkpoint .pt (overrides prompt).")
+    args = parser.parse_args()
+
+    default_ckpt = find_latest_ckpt("outputs", "stgt_*.pt")
+    ckpt_path = args.ckpt or prompt_ckpt(default_ckpt)
+    print(f"[INFO] using checkpoint -> {ckpt_path}")
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     state = torch.load(ckpt_path, map_location=device)
 
@@ -27,6 +57,7 @@ def main():
     if "U_lappe" in cfg["paths"] and cfg["paths"]["U_lappe"]:
         U_lappe = np.load(cfg["paths"]["U_lappe"]).astype("float32")
         Ulap = torch.from_numpy(U_lappe)
+        if Ulap is not None: Ulap = Ulap.to(device).float()
         K_lappe = U_lappe.shape[-1]
 
     print('[INFO] load neighbors + LapPE ok', flush=True)
@@ -61,6 +92,7 @@ def main():
         sp_adj=sp_adj if cfg['spatial_mode']=="sparsemm" else None
     )
     model.load_state_dict(sdict)
+    model.to(device)
     model.eval()
     print('[INFO] rebuild model ok', flush=True)
 
