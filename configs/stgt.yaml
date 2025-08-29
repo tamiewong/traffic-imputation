@@ -2,7 +2,7 @@ seed: 42
 use_cuda: true #false
 
 # model
-d_model: 32 #96
+d_model: 32 #48 #32 #96
 heads: 2 #4
 layers: 2 #1 #2
 time2vec_k: 6
@@ -11,16 +11,17 @@ dropout: 0.2
 # spatial encodings
 spatial_mode: sparsemm
 K_lappe: 0 #16
-spd_hops: 3 #2 #3        # BFS hop depth for neighbor sets
-K_neighbors: 13 #4 #16 #24    # number of neighbors per edge (includes self)
+spd_hops: 1 #2 #3        # BFS hop depth for neighbor sets
+K_neighbors: 8 #14 #16 #24    # number of neighbors per edge (includes self)
 
 # training
 epochs: 5 #20 #1
 lr: 0.002
 weight_decay: 0.0001
 grad_clip: 1.0
-lambda_conserve: 0 #0.001
-val_frac: 0.1
+lambda_conserve: 0.0005 #0.0005 #0 #0 #0.001
+test_frac: 0.2     # last 20% of time as test set
+val_frac: 0.1      # obs-level validation inside the train-time portion
 
 # batching windows
 window: 16 #96 #16 #32 #96   # 1 day if 15-min bins
@@ -31,7 +32,7 @@ temporal_edge_batch: 512 #256 #2048
 spatial_edge_batch: 512 #256 #4096
 # debug
 max_windows_debug: 0 #1     # stop after first window
-edge_subsample_frac: 0.5   # 50% edges per window; then 0.75 → 1.0
+edge_subsample_frac: 0.75 #0.75 #0.5   # 50% edges per window; then 0.75 → 1.0
 
 
 paths:

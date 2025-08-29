@@ -57,7 +57,7 @@ class TemporalGRUBlock(nn.Module):
         y,_ = self.gru(x)              # (E,T,d)
         h = self.ln(x + self.drop(y))
         z = self.ff(h)
-        # print('[MODEL][TEMPORAL][FORWARD] done')
+        print('[MODEL][TEMPORAL][FORWARD] done')
         return self.ln(h + self.drop(z))
     
 
@@ -163,7 +163,7 @@ class SpatialSparseMMBlock(nn.Module):
             out[:, t, :] = torch.sparse.mm(self.sp_adj, x[:, t, :])
         h = self.ln1(x + self.drop(out))
         y = self.ffn(h)
-        # print('[MODEL][SPARSEMM][FORWARD] done')
+        print('[MODEL][SPARSEMM][FORWARD] done')
         return self.ln2(h + self.drop(y))
 
 class STGT(nn.Module):

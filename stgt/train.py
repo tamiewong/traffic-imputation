@@ -18,6 +18,7 @@ from .data import load_inputs, build_edge_index, build_time_index, build_flow_ma
 from .graph import build_edge_adjacency_lists, build_neighbor_index, compute_laplacian_pe, build_incidence
 from .model import STGT
 from .losses import impute_loss
+from .eval import compute_metrics
 
 import time
 def tic(msg): 
@@ -39,7 +40,14 @@ def to_torch_sparse_coo(mat_csr: sparse.csr_matrix, device=None, dtype=torch.flo
     shape = torch.Size(coo.shape)
     return torch.sparse_coo_tensor(indices, values, shape, device=device)
 
+def keep_time_cols(mask_csr, keep_bool):
+    mask_lil = mask_csr.tolil(copy=True)
+    # zero out the columns we're NOT keeping
+    mask_lil[:, ~keep_bool] = False
+    return mask_lil.tocsr()
+
 def train_model(config_path: str):
+    t_start = time.time()
     print('[TRAIN] start'); sys.stdout.flush()
     cfg = yaml.safe_load(open(config_path, "r"))
     seed_everything(cfg.get("seed", 42))
@@ -129,8 +137,18 @@ def train_model(config_path: str):
     X_sparse, M_sparse = build_flow_mask(utd, node_map, edge_idx_of_node, time_to_col, E, T)
     print('[TRAIN] flows/masks ok', flush=True)
 
+    # split train-test
+    test_frac = float(cfg.get("test_frac", 0.2))
+    rng = np.random.default_rng(cfg.get("seed", 42))
+    is_test_time = rng.choice([False, True], size=T, p=[1-test_frac, test_frac])
+
     # Split observed entries into train/val
-    M_train, M_val = make_observation_split(M_sparse, val_frac=cfg.get("val_frac", 0.1), seed=cfg.get("seed", 42))
+    M_train_full, M_val = make_observation_split(M_sparse, val_frac=cfg.get("val_frac", 0.0), seed=cfg.get("seed", 42))
+
+    # Masks
+    M_obs_train_time = keep_time_cols(M_train_full, ~is_test_time)  # only train-time timestamps
+    M_test_time       = keep_time_cols(M_sparse,      is_test_time)  # only test-time timestamps
+    M_train, M_val   = make_observation_split(M_obs_train_time, val_frac=cfg.get("val_frac", 0.1), seed=cfg.get("seed", 42))
 
     # Incidence (for conservation)
     incidence_csr, _ = build_incidence(edges_df)
@@ -268,6 +286,63 @@ def train_model(config_path: str):
         # torch.save(model.state_dict(), os.path.join(out_dir, "stgt.pt"))
         # with open(os.path.join(out_dir, "train_summary.json"), "w") as f:
         #     json.dump({"epochs": epochs, "train_loss": float(avg_loss)}, f, indent=2)
+
+        print("[EVAL] evaluating on test-time windows...", flush=True)
+        model.eval()
+        # test_mae_sum, test_rmse_sum, test_r2_sum, n_wins = 0.0, 0.0, 0.0, 0
+        all_yh, all_yt = [], []
+
+        with torch.no_grad():
+            for Xb, _, Mb_test, hours, dows, s, e in window_generator(
+                    X_sparse, M_train, M_test_time, times, window, step):
+                # Build features/targets like training
+                x = torch.from_numpy(np.nan_to_num(Xb, nan=0.0)).float().unsqueeze(-1).to(device)  # (E,W,1)
+                x = torch.log1p(x)
+                y = torch.from_numpy(np.nan_to_num(Xb, nan=0.0)).float().to(device)               # (E,W)
+                h = torch.from_numpy(hours).float().to(device)
+                d = torch.from_numpy(dows).float().to(device)
+                m_te = torch.from_numpy(Mb_test).bool().to(device)                                 # (E,W)
+
+                yhat_log = model(x, h, d, Ulap)
+                # invert transform for reporting in original scale
+                yhat = torch.expm1(yhat_log).clamp_min(0)
+
+                # Collect only observed test entries
+                all_yh.append(yhat[m_te].detach().cpu().numpy())
+                all_yt.append(y[m_te].detach().cpu().numpy())
+
+                # metrics = compute_metrics(
+                #     yhat.detach().cpu().numpy(),   # (E,W) float
+                #     y.detach().cpu().numpy(),      # (E,W) float
+                #     m_te.detach().cpu().numpy().astype(bool)  # (E,W) bool
+                #         )
+                # mae, rmse, r2 = metrics["MAE"], metrics["RMSE"], metrics["R2"]
+                # test_mae_sum  += 0.0 if np.isnan(mae) else mae
+                # test_rmse_sum += 0.0 if np.isnan(rmse) else rmse
+                # test_r2_sum += 0.0 if np.isnan(r2) else r2
+
+                # n_wins += 1
+
+        # if n_wins == 0:
+        #     print("[EVAL][WARN] No test windows produced. Check your window/step vs test range.", flush=True)
+        # else:
+        #     print(f"[EVAL][TEST] windows={n_wins} | MAE={test_mae_sum/n_wins:.3f} | RMSE={test_rmse_sum/n_wins:.3f} | R2={test_r2_sum/n_wins:.3f}", flush=True)
+
+        # Concatenate and compute metrics once over all points
+        if len(all_yh) == 0:
+            print("[EVAL][WARN] No test observations collected.", flush=True)
+        else:
+            all_yh = np.concatenate(all_yh)  # shape (N_obs_total,)
+            all_yt = np.concatenate(all_yt)  # shape (N_obs_total,)
+            _mask = np.ones_like(all_yh, dtype=bool)
+
+            metrics = compute_metrics(all_yh, all_yt, _mask)
+            print(f"[EVAL][TEST][GLOBAL] MAE={metrics['MAE']:.3f} | "
+                f"RMSE={metrics['RMSE']:.3f} | R2={metrics['R2']:.3f}", flush=True)
+        
+    t_end = time.time()
+    print(f"[TRAIN] complete in {(t_start - t_end)/60/60:.2f}hrs")
+
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
