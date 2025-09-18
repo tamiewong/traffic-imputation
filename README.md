@@ -1,44 +1,68 @@
 # traffic-imputation
 
-Clone the repository:
+This project uses a **Spatio-Temporal Graph Transformer (ST-GT)** for traffic data imputation.
+
+## Clone the repository
+```
 git clone https://github.com/tamiewong/traffic-imputation.git
+```
 
-This project uses a Spatio-Temporal Graph Transformer to do traffic data imputation.
+## Setup
 
-To set up
+1. **Navigate to the cloned repository**
+   ```
+   cd traffic-imputation
+   ```
 
-1. Navigate to desired location
+2. **Create a virtual environment and install dependencies**
+   ```
+   python -m venv myenv
+   myenv\Scripts\activate      # On Windows
+   # source myenv/bin/activate  # On macOS/Linux
 
-2. Clone repo:
-> git clone https://github.com/<tamiewong>/<traffic-imputation>.git
+   python -m pip install --upgrade pip
+   ```
 
-3. Create virtual environment and install dependencies
-> cd <desired_location><br/>
-> python -m venv myenv<br/>
-> myenv\Scripts\activate<br/>
-> python -m pip install --upgrade pip<br/>
-If using CPU:
-> pip install -r requirements.txt<br/>
-> pip install -e<br/>
-If using GPU (Nvidia):
-> pip install -r requirements_GPU.txt<br/>
-> pip install -e<br/>
+   - **If using CPU:**
+     ```
+     pip install -r requirements.txt
+     pip install -e
+     ```
 
-4. Inside the data folder, locate the file utd_agg
+   - **If using GPU (Nvidia CUDA):**
+     ```
+     pip install -r requirements_GPU.txt
+     pip install -e
+     ```
 
-5. Unzip the file and ensure that it is shown as utd_agg.parquet inside the data folder
+3. **Prepare the data**
+   - Ensure the following file exists after extraction/placement:
+     ```
+     data/utd_agg.parquet
+     ```
 
-6. If using CPU, in configs/stgt.yaml, use_cuda=False
+4. **Configuration**
+   - If using CPU, set `use_cuda: False` in `configs/stgt.yaml`.
 
+## Running the Model
 
-To run the ST-GT
-1. Open Windows PowerShell or Terminal
-2. Activate environment
-3. Navigate to the location of the repository
-4. Run this line to train model:
-> python -m stgt.train --config configs/stgt.yaml
-5. Model performance is printed in the terminal, at the end of the run
+1. Open PowerShell (Windows) or Terminal (macOS/Linux).
+2. Activate your environment:
+   ```
+   myenv\Scripts\activate      # On Windows
+   # source myenv/bin/activate  # On macOS/Linux
+   ```
+3. Navigate to the repository folder:
+   ```
+   cd traffic-imputation
+   ```
+4. Train the model:
+   ```
+   python -m stgt.train --config configs/stgt.yaml
+   ```
+5. Model performance will be printed in the terminal at the end of training.
 
-Data size
-Number of timestamps (temporal) = 2083
-Number of roads/edges (spatial) = 63204
+## Data Information
+
+- **Number of timestamps (temporal):** 2083
+- **Number of roads/edges (spatial):** 63,204
