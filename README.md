@@ -8,14 +8,14 @@ This project uses a Spatio-Temporal Graph Transformer to do traffic data imputat
 To set up
 1. Navigate to desired location
 2. Clone repo:
->> git clone https://github.com/<tamiewong>/<traffic-imputation>.git
+> git clone https://github.com/<tamiewong>/<traffic-imputation>.git
 3. Create virtual environment and install dependencies
->> cd <desired_location>
->> python -m venv myenv
->> myenv\Scripts\activate
->> python -m pip install --upgrade pip
->> pip install -r requirements.txt
->> pip install -e
+> cd <desired_location>
+> python -m venv myenv
+> myenv\Scripts\activate
+> python -m pip install --upgrade pip
+> pip install -r requirements.txt
+> pip install -e
 
 
 To run the ST-GT
@@ -23,9 +23,8 @@ To run the ST-GT
 2. Activate environment
 3. Navigate to the location of the repository
 4. Run this line to train model:
-python -m stgt.train --config configs/stgt.yaml
-5. Run this line to evaluate model:
-python -m stgt.run_eval --ckpt "outputs\stgt_YYYYMMDD-HHMMSS.pt"
+> python -m stgt.train --config configs/stgt.yaml
+5. Model performance is printed in the terminal, at the end of the run
 
 Data size
 Number of timestamps (temporal) = 2083
