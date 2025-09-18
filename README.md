@@ -13,16 +13,16 @@ To set up
 > git clone https://github.com/<tamiewong>/<traffic-imputation>.git
 
 3. Create virtual environment and install dependencies
-> cd <desired_location>
-> python -m venv myenv
-> myenv\Scripts\activate
-> python -m pip install --upgrade pip
+> cd <desired_location><br/>
+> python -m venv myenv<br/>
+> myenv\Scripts\activate<br/>
+> python -m pip install --upgrade pip<br/>
 If using CPU:
-> pip install -r requirements.txt
-> pip install -e
+> pip install -r requirements.txt<br/>
+> pip install -e<br/>
 If using GPU (Nvidia):
-> pip install -r requirements_GPU.txt
-> pip install -e
+> pip install -r requirements_GPU.txt<br/>
+> pip install -e<br/>
 
 4. Inside the data folder, locate the file utd_agg
 
