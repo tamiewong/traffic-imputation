@@ -6,18 +6,29 @@ git clone https://github.com/tamiewong/traffic-imputation.git
 This project uses a Spatio-Temporal Graph Transformer to do traffic data imputation.
 
 To set up
+
 1. Navigate to desired location
+
 2. Clone repo:
 > git clone https://github.com/<tamiewong>/<traffic-imputation>.git
+
 3. Create virtual environment and install dependencies
 > cd <desired_location>
 > python -m venv myenv
 > myenv\Scripts\activate
 > python -m pip install --upgrade pip
+If using CPU:
 > pip install -r requirements.txt
 > pip install -e
+If using GPU (Nvidia):
+> pip install -r requirements_GPU.txt
+> pip install -e
+
 4. Inside the data folder, locate the file utd_agg
+
 5. Unzip the file and ensure that it is shown as utd_agg.parquet inside the data folder
+
+6. If using CPU, in configs/stgt.yaml, use_cuda=False
 
 
 To run the ST-GT
