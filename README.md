@@ -16,6 +16,8 @@ To set up
 > python -m pip install --upgrade pip
 > pip install -r requirements.txt
 > pip install -e
+4. Inside the data folder, locate the file utd_agg
+5. Unzip the file and ensure that it is shown as utd_agg.parquet inside the data folder
 
 
 To run the ST-GT
